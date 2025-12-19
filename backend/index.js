@@ -1,38 +1,74 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+require('dotenv').config();
 
-const { Pool } = require("pg");
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
 
 const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3001;
-
-// Use DATABASE_URL from .env
+// PostgreSQL connection pool
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'textdnd_db',
 });
 
-// Basic API health
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true, service: "backend", port: PORT });
+// ---------- ROUTES ----------
+
+// Health check (server only)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    server: 'running',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// DB health check
-app.get("/api/db-health", async (req, res) => {
+// Database health check (simple connect test)
+app.get('/api/db-health', async (req, res) => {
   try {
-    const result = await pool.query("SELECT NOW() as now;");
-    res.json({ ok: true, dbTime: result.rows[0].now });
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'ok',
+      database: 'connected',
+    });
   } catch (err) {
+    console.error('DB health check failed:', err);
     res.status(500).json({
-      ok: false,
-      error: err.message,
+      status: 'error',
+      message: 'Database connection failed',
     });
   }
 });
 
+// ✅ Database version test (NEW)
+app.get('/api/db-version', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT version();');
+
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      version: result.rows[0].version,
+    });
+  } catch (err) {
+    console.error('DB version check failed:', err);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Database query failed',
+    });
+  }
+});
+
+// ---------- START SERVER ----------
 app.listen(PORT, () => {
   console.log(`Backend API running on http://localhost:${PORT}`);
 });
